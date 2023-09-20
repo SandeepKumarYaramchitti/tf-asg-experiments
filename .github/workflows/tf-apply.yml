@@ -1,4 +1,4 @@
-name: Next.js ECS Deploy
+name: Create or Update Infrastructure
 
 on:
   workflow_dispatch:
