@@ -92,7 +92,7 @@ resource "aws_lb_listener" "terramino" {
 
 resource "aws_lb_target_group" "terramino" {
   name     = "learn-asg-terramino"
-  port     = 80
+  port     = 8080
   protocol = "HTTP"
   vpc_id   = module.vpc.vpc_id
 }
