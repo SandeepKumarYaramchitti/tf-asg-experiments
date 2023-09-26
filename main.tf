@@ -24,14 +24,28 @@ data "aws_ami" "amazon-linux" {
 
   filter {
     name   = "name"
-    values = ["amzn-ami-hvm-*-x86_64-ebs"]
+    values = ["al2023-ami-*-kernel-6.1-x86_64"]
   }
 }
 
+# amzn-ami-hvm-2018.03.0.20230905.0-x86_64-ebs
+
+# al2023-ami-2023.2.20230920.1-kernel-6.1-x86_64
+
+resource "aws_iam_instance_profile" "codedeploy_ec2_profile" {
+  name = "codedeploy-instance-profile"
+  role = aws_iam_role.codedeploy_role.name
+}
+
+
+
 resource "aws_launch_configuration" "terramino" {
-  name_prefix     = "learn-terraform-aws-asg-"
+  name_prefix          = "learn-terraform-aws-asg-"
+  iam_instance_profile = aws_iam_instance_profile.codedeploy_ec2_profile.name
+  # iam_instance_profile = aws_iam_instance_profile.codedeploy_ec2_profile.name
   image_id        = data.aws_ami.amazon-linux.id
   instance_type   = "t2.micro"
+  key_name        = "asg-key-pair"
   user_data       = file("user-data.sh")
   security_groups = [aws_security_group.terramino_instance.id]
 
@@ -92,6 +106,15 @@ resource "aws_autoscaling_attachment" "terramino" {
 
 resource "aws_security_group" "terramino_instance" {
   name = "learn-asg-terramino-instance"
+
+  # Port 22 for SSH
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   ingress {
     from_port       = 80
     to_port         = 80
@@ -127,3 +150,97 @@ resource "aws_security_group" "terramino_lb" {
 
   vpc_id = module.vpc.vpc_id
 }
+
+# S3 Bucket for CodeDeploy deployment packages
+resource "aws_s3_bucket" "codedeploy_bucket" {
+  bucket = "cloudysky-codedeploy-bucket"
+  acl    = "private"
+}
+
+# CodeDeploy Application
+resource "aws_codedeploy_app" "app" {
+  name = "my-codedeploy-app"
+}
+
+# CodeDeploy Deployment Group
+resource "aws_codedeploy_deployment_group" "dg" {
+  app_name              = aws_codedeploy_app.app.name
+  deployment_group_name = "my-deployment-group"
+  service_role_arn      = aws_iam_role.codedeploy_role.arn
+  autoscaling_groups    = [aws_autoscaling_group.terramino.name]
+
+  deployment_config_name = "CodeDeployDefault.OneAtATime"
+
+  # Configure the load balancer for Blue/Green deployments (optional)
+  load_balancer_info {
+    target_group_pair_info {
+      prod_traffic_route {
+        listener_arns = [aws_lb_listener.terramino.arn]
+      }
+
+      target_group {
+        name = aws_lb_target_group.terramino.name
+      }
+    }
+  }
+}
+
+# IAM Role for CodeDeploy
+resource "aws_iam_role" "codedeploy_role" {
+  name = "codedeploy-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = ["codedeploy.amazonaws.com", "ec2.amazonaws.com"]
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "codedeploy_policy_attachment" {
+  role       = aws_iam_role.codedeploy_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+}
+
+resource "aws_iam_policy" "s3_access_for_codedeploy" {
+  name        = "S3AccessForCodeDeploy"
+  description = "Policy that grants access to S3 bucket for CodeDeploy"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        Effect = "Allow",
+        Resource = [
+          "arn:aws:s3:::cloudysky-codedeploy-bucket",
+          "arn:aws:s3:::cloudysky-codedeploy-bucket/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "s3_access_attachment_for_codedeploy" {
+  role       = aws_iam_role.codedeploy_role.name
+  policy_arn = aws_iam_policy.s3_access_for_codedeploy.arn
+}
+
+
+
+
+
+
+
+
+
+

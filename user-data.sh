@@ -1,16 +1,18 @@
 #!/bin/bash
 yum update -y
-yum -y remove httpd
-yum -y remove httpd-tools
-yum install -y httpd24 php72 mysql57-server php72-mysqlnd
-service httpd start
-chkconfig httpd on
+yum install -y nodejs ruby
+yum install -y wget
+cd /usr/local
+npm install pm2 -g
+echo "Node.js version:"
+node -v
+echo "PM2 version:"
+pm2 -v
+echo "WGET version:"
+wget --version
 
-usermod -a -G apache ec2-user
-chown -R ec2-user:apache /var/www
-chmod 2775 /var/www
-find /var/www -type d -exec chmod 2775 {} \;
-find /var/www -type f -exec chmod 0664 {} \;
-cd /var/www/html
-curl http://169.254.169.254/latest/meta-data/instance-id -o index.html
-curl https://raw.githubusercontent.com/hashicorp/learn-terramino/master/index.php -O
+# Install CodeDeploy Agent for us-east-1 region
+wget https://aws-codedeploy-us-east-1.s3.us-east-1.amazonaws.com/latest/install
+chmod +x ./install
+./install auto
+service codedeploy-agent start
