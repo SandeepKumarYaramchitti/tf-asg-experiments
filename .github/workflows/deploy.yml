@@ -1,4 +1,4 @@
-name: Build and Deploy to S3
+name: Deploy app to ASG
 
 on:
   workflow_dispatch:  
@@ -11,20 +11,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: '16'  # Adjust this to your desired Node version
-
-    - name: Install dependencies
-      run: npm install
-
-    - name: Make scripts executable
-      run: chmod +x aws/scripts/*.sh
-
-    - name: Create deployment artifact
-      run: zip -r node-app.zip .
-
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v3
       with:
@@ -33,4 +19,8 @@ jobs:
         aws-region: us-east-1  # Adjust this to your AWS region
 
     - name: Upload to S3
-      run: aws s3 cp node-app.zip s3://${{ secrets.AWS_S3_BUCKET }}/node-app.zip
+      run: |
+        aws deploy create-deployment \
+          --application-name my-codedeploy-app \
+          --deployment-group-name my-deployment-group \
+          --s3-location bucket=${{ secrets.AWS_S3_BUCKET }},bundleType=zip,key=node-app.zip
