@@ -71,6 +71,112 @@ resource "aws_autoscaling_group" "terramino" {
   }
 }
 
+# Autoscaling life cycle hooks
+resource "aws_autoscaling_lifecycle_hook" "asg_life_cycle_hook" {
+  name                    = "asg-life-cycle-hook"
+  autoscaling_group_name  = aws_autoscaling_group.terramino.name
+  default_result          = "CONTINUE"
+  heartbeat_timeout       = 2000
+  lifecycle_transition    = "autoscaling:EC2_INSTANCE_LAUNCHING"
+  notification_target_arn = aws_sns_topic.my_sns_topic.arn
+  role_arn                = aws_iam_role.cw_to_sns_role.arn
+}
+
+# Set up a SNS topic name
+resource "aws_sns_topic" "my_sns_topic" {
+  name = "my_sns_topic"
+}
+
+# Create a subscription to the SNS topic
+resource "aws_sns_topic_subscription" "my_sns_topic_subscription" {
+  topic_arn = aws_sns_topic.my_sns_topic.arn
+  protocol  = "email"
+  endpoint  = "ysandeepkumar88@gmail.com"
+}
+
+
+
+
+# Create Cloudwatch event rule that will watch for EC2 to get into life cycle hook
+resource "aws_cloudwatch_event_rule" "asg_lifecycle_event" {
+  name        = "asg-lifecycle-event"
+  description = "Watch for EC2 to get into life cycle hook"
+  event_pattern = jsonencode({
+    source      = ["aws.autoscaling"]
+    detail_type = ["EC2 Instance-launch Lifecycle Action"]
+    detail = {
+      AutoScalingGroupName = [aws_autoscaling_group.terramino.name]
+    }
+  })
+}
+
+# Create a target for the event rule
+resource "aws_cloudwatch_event_target" "asg_lifecycle_event_target" {
+  rule = aws_cloudwatch_event_rule.asg_lifecycle_event.name
+  arn  = aws_sns_topic.my_sns_topic.arn
+  input_transformer {
+    input_paths = {
+      instance_id = "$.detail.EC2InstanceId"
+    }
+    input_template = "\"Instance with ID <instance_id> entered the lifecycle hook.\""
+  }
+}
+
+resource "aws_iam_role" "cw_to_sns_role" {
+  name = "CloudWatchToSNSTopicRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = ["events.amazonaws.com", "autoscaling.amazonaws.com"]
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "cw_to_sns_policy" {
+  name = "CloudWatchToSNSTopicPolicy"
+  role = aws_iam_role.cw_to_sns_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action   = "sns:Publish",
+        Effect   = "Allow",
+        Resource = aws_sns_topic.my_sns_topic.arn
+      }
+    ]
+  })
+}
+
+# resource "aws_iam_role_policy_attachment" "cw_to_sns_policy_attachment" {
+#   role       = aws_iam_role.cw_to_sns_role.id
+#   policy_arn = "arn:aws:iam::aws:policy/service-role/AutoScalingNotificationAccessRole"
+# }
+
+
+# resource "aws_iam_role_policy" "cw_to_sns_policy" {
+#   name = "CloudWatchToSNSTopicPolicy"
+#   role = aws_iam_role.cw_to_sns_role.id
+
+#   policy = jsonencode({
+#     Version = "2012-10-17",
+#     Statement = [
+#       {
+#         Action   = "sns:Publish",
+#         Effect   = "Allow",
+#         Resource = aws_sns_topic.asg_lifecycle_topic.arn
+#       }
+#     ]
+#   })
+# }
+
 resource "aws_lb" "terramino" {
   name               = "learn-asg-terramino-lb"
   internal           = false
@@ -107,13 +213,13 @@ resource "aws_autoscaling_attachment" "terramino" {
 resource "aws_security_group" "terramino_instance" {
   name = "learn-asg-terramino-instance"
 
-  # Port 22 for SSH
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # # Port 22 for SSH
+  # ingress {
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
   ingress {
     from_port   = 8080
