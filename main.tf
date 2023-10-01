@@ -213,13 +213,13 @@ resource "aws_autoscaling_attachment" "terramino" {
 resource "aws_security_group" "terramino_instance" {
   name = "learn-asg-terramino-instance"
 
-  # # Port 22 for SSH
-  # ingress {
-  #   from_port   = 22
-  #   to_port     = 22
-  #   protocol    = "tcp"
-  #   cidr_blocks = ["0.0.0.0/0"]
-  # }
+  # Port 22 for SSH
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     from_port   = 8080
