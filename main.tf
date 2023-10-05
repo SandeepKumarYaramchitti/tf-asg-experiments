@@ -73,12 +73,14 @@ resource "aws_autoscaling_group" "terramino" {
 
 # Autoscaling life cycle hooks
 resource "aws_autoscaling_lifecycle_hook" "asg_life_cycle_hook" {
-  name                    = "asg-life-cycle-hook"
-  autoscaling_group_name  = aws_autoscaling_group.terramino.name
-  default_result          = "CONTINUE"
-  heartbeat_timeout       = 2000
-  lifecycle_transition    = "autoscaling:EC2_INSTANCE_LAUNCHING"
-  notification_target_arn = aws_sns_topic.my_sns_topic.arn
+  name                   = "asg-life-cycle-hook"
+  autoscaling_group_name = aws_autoscaling_group.terramino.name
+  default_result         = "CONTINUE"
+  heartbeat_timeout      = 2000
+  lifecycle_transition   = "autoscaling:EC2_INSTANCE_LAUNCHING"
+  # notification_target_arn = aws_sns_topic.my_sns_topic.arn
+  # Replace notification arn to lambda function arn
+  notification_target_arn = aws_lambda_function.asg_lifecycle_hook.arn
   role_arn                = aws_iam_role.cw_to_sns_role.arn
 }
 
@@ -155,6 +157,23 @@ resource "aws_iam_role_policy" "cw_to_sns_policy" {
   })
 }
 
+resource "aws_iam_role_policy" "invoke_lambda_from_asg" {
+  name = "InvokeLambdaFromASG"
+  role = aws_iam_role.cw_to_sns_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action   = "lambda:InvokeFunction",
+        Effect   = "Allow",
+        Resource = aws_lambda_function.asg_lifecycle_hook.arn
+      }
+    ]
+  })
+}
+
+
 # resource "aws_iam_role_policy_attachment" "cw_to_sns_policy_attachment" {
 #   role       = aws_iam_role.cw_to_sns_role.id
 #   policy_arn = "arn:aws:iam::aws:policy/service-role/AutoScalingNotificationAccessRole"
@@ -214,12 +233,12 @@ resource "aws_security_group" "terramino_instance" {
   name = "learn-asg-terramino-instance"
 
   # Port 22 for SSH
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # ingress {
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
   ingress {
     from_port   = 8080
@@ -351,6 +370,72 @@ resource "aws_iam_role_policy_attachment" "s3_access_attachment_for_codedeploy" 
   role       = aws_iam_role.codedeploy_role.name
   policy_arn = aws_iam_policy.s3_access_for_codedeploy.arn
 }
+
+# Zip the lambda function
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_file = "lambda-src/handler.py"
+  output_path = "lambda-src/lambda.zip"
+}
+
+# resource "aws_iam_role" "lambda_role" {
+#   name = "my_lambda_function_role"
+
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17",
+#     Statement = [
+#       {
+#         Action = "sts:AssumeRole",
+#         Effect = "Allow",
+#         Principal = {
+#           Service = "lambda.amazonaws.com"
+#         }
+#       }
+#     ]
+#   })
+# }
+
+resource "aws_iam_role" "lambda_execution_role" {
+  name = "lambda_execution_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = ["lambda.amazonaws.com", "autoscaling.amazonaws.com"]
+        }
+      }
+    ]
+  })
+}
+
+# Create Lambda function
+resource "aws_lambda_function" "asg_lifecycle_hook" {
+  function_name = "asg_lifecycle_hook"
+  role          = aws_iam_role.lambda_execution_role.arn
+  handler       = "handler.handler" # Assuming the handler function in your handler.py is named "handler"
+
+  filename = data.archive_file.lambda_zip.output_path
+
+  runtime = "python3.8" # Update to the desired Python version
+
+  # Optional: set environment variables for the Lambda function
+  # environment {
+  #   variables = {
+  #     foo = "bar"
+  #   }
+  # }
+}
+
+
+
+
+
+
+
 
 
 

@@ -1,0 +1,6 @@
+---
+- name: Install pm2
+  hosts: localhost
+  tasks:
+  - name: Install pm2 via npm
+    command: npm install pm2@latest -g
