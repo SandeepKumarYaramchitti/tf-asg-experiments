@@ -3,7 +3,7 @@ const app = express();
 const PORT = 8080;
 
 app.get('/', (req, res) => {
-  res.send('Hello from CodeDeploy Sample Node.js App!');
+  res.send('Hello from CodeDeploy Sample Node.js!');
 });
 
 app.listen(PORT, () => {
