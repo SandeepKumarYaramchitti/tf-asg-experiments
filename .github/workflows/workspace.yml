@@ -2,7 +2,7 @@ name: Delete Terraform Workspace
 on:
   push:
     branches:
-      - workspace
+      - master
 
 jobs:
   runterraform:
