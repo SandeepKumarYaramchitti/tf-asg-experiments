@@ -1,34 +1,29 @@
 name: Delete Terraform Workspace
+
 on:
   push:
     branches:
       - master
-
+  
 jobs:
-  runterraform:
+  delete-workspace:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: List out directory
-        run: ls
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-          terraform_wrapper: false
-
-      - name: Terraform init
-        run: terraform init -upgrade
-
-      - name: Terraform list workspaces
-        run: terraform workspace list
-
-      - name: Terraform delete workspace
-        run: terraform workspace delete terraform-sandeep-aws
-
-
-
+    - name: Checkout code
+      uses: actions/checkout@v2
+      
+    - name: Set up Terraform CLI
+      uses: hashicorp/setup-terraform@v1
+      
+    - name: Switch to a temporary workspace (optional)
+      run: terraform workspace new temp-workspace
+      
+    - name: Select the workspace to delete
+      run: terraform workspace select terraform-sandeep-aws
+      
+    - name: Delete the workspace
+      run: terraform workspace delete terraform-sandeep-aws -force
+      
+    - name: Clean up
+      run: terraform workspace select default && terraform workspace delete temp-workspace -force
